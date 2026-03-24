@@ -4,7 +4,7 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # Копируем зависимости
-COPY app/requirements.txt .
+COPY requirements.txt .
 
 # Устанавливаем зависимости
 RUN pip install --upgrade pip \
