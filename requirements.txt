@@ -5,6 +5,8 @@ asyncpg==0.31.0
 certifi==2026.2.25
 click==8.3.1
 context==0.1.0
+dnspython==2.8.0
+email-validator==2.3.0
 fastapi==0.135.2
 greenlet==3.3.2
 h11==0.16.0
