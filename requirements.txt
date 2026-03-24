@@ -2,6 +2,7 @@ annotated-doc==0.0.4
 annotated-types==0.7.0
 anyio==4.13.0
 certifi==2026.2.25
+click==8.3.1
 context==0.1.0
 fastapi==0.135.2
 greenlet==3.3.2
@@ -22,3 +23,4 @@ SQLAlchemy==2.0.48
 starlette==1.0.0
 typing-inspection==0.4.2
 typing_extensions==4.15.0
+uvicorn==0.42.0
