@@ -62,13 +62,26 @@ async def get_item_by_link_id(db: AsyncSession, link_id: str):
     result = await db.execute(select(Item).filter_by(link_id=link_id))
     return result.scalar()
 
+# async def delete_item(db: AsyncSession, item_id: int):
+#     result = await db.execute(select(Item).filter_by(id=item_id))
+#     item = result.scalar()
+#     if item:
+#         await db.delete(item)
+#         await db.commit()
+#     return item
+
+
 async def delete_item(db: AsyncSession, item_id: int):
-    result = await db.execute(select(Item).filter_by(id=item_id))
-    item = result.scalar()
-    if item:
-        await db.delete(item)
-        await db.commit()
-    return item
+    item = await get_item_by_id(db, item_id)
+
+    # удалить связанные клики
+    await db.execute(
+        delete(Click).where(Click.link_id == item.link_id)
+    )
+
+    # удалить сам item
+    await db.delete(item)
+    await db.commit()
 
 
 
