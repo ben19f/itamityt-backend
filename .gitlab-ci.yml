@@ -27,6 +27,7 @@ build-image:
 update-infra:
   stage: update
   image: alpine:latest
+  needs: ["build-image"]  # <-- только если первый успешен
 
   script:
     - apk add --no-cache git yq
