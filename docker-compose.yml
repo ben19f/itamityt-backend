@@ -7,8 +7,8 @@ services:
       dockerfile: Dockerfile
     container_name: itamityt_web
     restart: always
-    # env_file:
-    #   - .env
+    env_file:
+      - ../.backendenv
     # envFrom:
     #   secretRef:
     #     name: projectsecrets
