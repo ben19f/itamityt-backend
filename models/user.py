@@ -15,6 +15,19 @@ class User(Base):
         nullable=False,
         index=True
     )
+    profile_description = Column(
+        String,
+        default="немного о профиле или компании",
+        nullable=False,
+        index=True
+    )
+
+    profile_extra_info = Column(
+        String,
+        default="Дополнительная информация",
+        nullable=False,
+        index=True
+    )
 
     items = relationship("Item", back_populates="user", cascade="all, delete-orphan")
 

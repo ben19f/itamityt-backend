@@ -23,7 +23,14 @@ class UserCreate(BaseModel):
 
 @router.get("/me")
 async def get_me(current_user: User = Depends(get_current_user)):
-    return current_user
+    return {
+        "id": current_user.id,
+        "username": current_user.username,
+        "email": current_user.email,
+        "display_name": current_user.display_name,
+        "profile_description": current_user.profile_description,
+        "profile_extra_info": current_user.profile_extra_info,
+    }
 
 
 @router.post("/register", status_code=201)

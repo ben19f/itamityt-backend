@@ -18,8 +18,19 @@ async def public_profile(username: str, db: AsyncSession = Depends(get_db)):
 
     items = await get_items_by_user(db, user.id)
 
-    return items
-
+    return {
+        "username": user.username,
+        "display_name": user.display_name,
+        "profile_description": user.profile_description,
+        "profile_extra_info": user.profile_extra_info,
+        "items": [
+            {
+                "name": item.name,
+                "link_id": item.link_id
+            }
+            for item in items
+        ]
+    }
 
 @router.get("/last-users")
 async def last_users(db: AsyncSession = Depends(get_db)):
