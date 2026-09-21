@@ -4,6 +4,8 @@ from logging.config import fileConfig
 from sqlalchemy import create_engine
 from alembic import context
 
+from sqlalchemy.engine import make_url
+
 # добавляем app/ в путь
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "app"))
 
@@ -39,7 +41,14 @@ def run_migrations_offline():
 
 def run_migrations_online():
     """Run migrations in 'online' mode."""
-    connectable = create_engine(settings.database_url)
+    # connectable = create_engine(settings.database_url)
+    database_url = make_url(settings.database_url)
+
+    database_url = database_url.set(
+        drivername="postgresql+psycopg"
+    )
+
+    connectable = create_engine(database_url)
 
     with connectable.connect() as connection:
         context.configure(

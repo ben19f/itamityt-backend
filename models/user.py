@@ -9,6 +9,12 @@ class User(Base):
     username = Column(String, unique=True, index=True, nullable=False)
     email = Column(String, unique=True, index=True)
     hashed_password = Column(String)
+    display_name = Column(
+        String,
+        default="Дисплей нейм пользователя",
+        nullable=False,
+        index=True
+    )
 
     items = relationship("Item", back_populates="user", cascade="all, delete-orphan")
 
