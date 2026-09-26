@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from . import health, public
 from . import items, users
 from . import auth
+from api.storage_test import router as storage_test_router
 
 router = APIRouter()
 
@@ -11,3 +12,4 @@ router.include_router(items.router)
 router.include_router(auth.router)
 router.include_router(public.router)  # <-- новый публичный API
 router.include_router(users.router)
+router.include_router(storage_test_router)

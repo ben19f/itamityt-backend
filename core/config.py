@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     ALGORITHM: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int
 
+    # S3
     S3_ENDPOINT: str
     S3_PUBLIC_URL: str
     S3_ACCESS_KEY: str
@@ -15,11 +16,14 @@ class Settings(BaseSettings):
     S3_REGION: str = "us-east-1"
     S3_PREFIX: str = "dev"
 
+    # Upload limits
     MAX_AVATAR_SIZE: int = 5 * 1024 * 1024
     MAX_PHOTO_SIZE: int = 10 * 1024 * 1024
     MAX_USER_PHOTOS: int = 5
 
-    model_config = SettingsConfigDict(extra="ignore")
+    model_config = SettingsConfigDict(
+        extra="ignore"
+    )
 
 
 settings = Settings()
