@@ -4,7 +4,7 @@ from sqlalchemy import select
 
 from core.security import hash_password, get_current_user
 from core.config import settings
-from models.user import User
+from models.users_model import User
 from db.deps import get_db  # твоя async сессия
 from fastapi import status
 

@@ -11,7 +11,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "..", "app"))
 
 from core.config import settings
 from db.base import Base
-from models.user import User
+from models.users_model import User
 from models.item import Item
 
 # метадата всех моделей
