@@ -128,6 +128,28 @@ async def update_me(
     }
 
 
+@router.get("/me/photos")
+async def get_my_photos(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(UserPhoto)
+        .where(UserPhoto.user_id == current_user.id)
+        .order_by(UserPhoto.position)
+    )
+
+    photos = result.scalars().all()
+
+    return [
+        {
+            "id": photo.id,
+            "image_url": photo.image_url,
+            "position": photo.position,
+        }
+        for photo in photos
+    ]
+
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 async def register_user(
     user: UserCreate,
