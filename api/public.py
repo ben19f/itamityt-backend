@@ -37,13 +37,9 @@ async def get_public_profile(
 
     return {
         "username": user.username,
-
         "display_name": user.display_name,
-
         "avatar_url": user.avatar_url,
-
         "owner_verified": user.owner_verified,
-
         "service_verified": user.service_verified,
 
         "photos": [
@@ -70,3 +66,25 @@ async def get_public_profile(
             "extra"
         ]
     }
+
+
+@router.get("/last-users")
+async def get_last_users(
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(
+        select(User)
+        .order_by(User.id.desc())
+        .limit(10)
+    )
+
+    users = result.scalars().all()
+
+    return [
+        {
+            "username": user.username,
+            "display_name": user.display_name,
+            "avatar_url": user.avatar_url
+        }
+        for user in users
+    ]
