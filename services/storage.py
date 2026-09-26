@@ -30,19 +30,8 @@ class S3Storage:
         key: str,
         content_type: str | None = None,
     ) -> str:
-        """
-        Загружает UploadFile непосредственно в S3.
-
-        Файл не читается целиком в память.
-        """
-
         file_object = file.file
 
-        # Узнаём размер файла.
-        file_object.seek(0, 2)
-        file_size = file_object.tell()
-
-        # Возвращаемся в начало файла перед загрузкой.
         file_object.seek(0)
 
         await run_in_threadpool(
@@ -62,10 +51,6 @@ class S3Storage:
         return self.public_url(key)
 
     async def delete(self, key: str) -> None:
-        """
-        Удаляет объект из S3.
-        """
-
         await run_in_threadpool(
             self.client.delete_object,
             Bucket=settings.s3_bucket,
@@ -73,10 +58,6 @@ class S3Storage:
         )
 
     async def exists(self, key: str) -> bool:
-        """
-        Проверяет существование объекта в S3.
-        """
-
         try:
             await run_in_threadpool(
                 self.client.head_object,
@@ -89,14 +70,18 @@ class S3Storage:
             return False
 
     def public_url(self, key: str) -> str:
-        """
-        Возвращает публичный URL объекта.
-        """
-
         return (
             f"{settings.s3_public_url.rstrip('/')}/"
             f"{key.lstrip('/')}"
         )
+
+    def key_from_url(self, url: str) -> str | None:
+        prefix = settings.s3_public_url.rstrip("/") + "/"
+
+        if not url.startswith(prefix):
+            return None
+
+        return url[len(prefix):]
 
 
 storage = S3Storage()

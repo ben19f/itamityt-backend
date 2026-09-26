@@ -1,6 +1,9 @@
+import uuid
+
 from fastapi import (
     APIRouter,
     Depends,
+    File,
     HTTPException,
     UploadFile,
     status,
@@ -9,38 +12,24 @@ from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.security import (
-    hash_password,
-    get_current_user,
-)
-
-from models.users_model import (
-    User,
-    UserPhoto,
-)
-
-from db.deps import get_db
-from db.crud_user import delete_user_by_id
-
-from services.file_service import (
-    delete_file,
-    public_url_to_path,
-    save_avatar,
-    save_photo,
-)
-
 from core.config import settings
+from core.security import get_current_user, hash_password
+from db.crud_user import delete_user_by_id
+from db.deps import get_db
+# from models.user_photo import UserPhoto
+from models.users_model import User, UserPhoto
+from services.storage import storage
 
 
-router = APIRouter(
-    prefix="/users",
-    tags=["users"],
-)
+router = APIRouter(prefix="/users", tags=["users"])
 
 
-# ============================================================
-# Schemas
-# ============================================================
+ALLOWED_IMAGE_TYPES = {
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+}
+
 
 class UserCreate(BaseModel):
     username: str
@@ -54,9 +43,50 @@ class UserProfileUpdate(BaseModel):
     profile_extra_info: str | None = None
 
 
-# ============================================================
-# GET /users/me
-# ============================================================
+async def validate_image(
+    file: UploadFile,
+    max_size: int,
+) -> str:
+    """
+    Проверяет тип и размер изображения.
+
+    Возвращает расширение файла:
+    jpg / png / webp
+    """
+
+    if not file.content_type:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Content-Type is required",
+        )
+
+    if file.content_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unsupported image type. Allowed: JPEG, PNG, WEBP",
+        )
+
+    file.file.seek(0, 2)
+    file_size = file.file.tell()
+    file.file.seek(0)
+
+    if file_size == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File is empty",
+        )
+
+    if file_size > max_size:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=(
+                f"File is too large. "
+                f"Maximum size is {max_size // 1024 // 1024} MB"
+            ),
+        )
+
+    return ALLOWED_IMAGE_TYPES[file.content_type]
+
 
 @router.get("/me")
 async def get_me(
@@ -70,14 +100,8 @@ async def get_me(
         "profile_description": current_user.profile_description,
         "profile_extra_info": current_user.profile_extra_info,
         "avatar_url": current_user.avatar_url,
-        "owner_verified": current_user.owner_verified,
-        "service_verified": current_user.service_verified,
     }
 
-
-# ============================================================
-# PATCH /users/me
-# ============================================================
 
 @router.patch("/me")
 async def update_me(
@@ -85,16 +109,10 @@ async def update_me(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    data = profile.model_dump(
-        exclude_unset=True,
-    )
+    data = profile.model_dump(exclude_unset=True)
 
     for field, value in data.items():
-        setattr(
-            current_user,
-            field,
-            value,
-        )
+        setattr(current_user, field, value)
 
     await db.commit()
     await db.refresh(current_user)
@@ -107,141 +125,219 @@ async def update_me(
         "profile_description": current_user.profile_description,
         "profile_extra_info": current_user.profile_extra_info,
         "avatar_url": current_user.avatar_url,
-        "owner_verified": current_user.owner_verified,
-        "service_verified": current_user.service_verified,
     }
 
 
-# ============================================================
-# POST /users/me/avatar
-#
-# Загрузка / замена аватара
-# ============================================================
+@router.post("/register", status_code=status.HTTP_201_CREATED)
+async def register_user(
+    user: UserCreate,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(User).where(
+            (User.username == user.username)
+            | (User.email == user.email)
+        )
+    )
 
-@router.post("/me/avatar")
-async def upload_avatar(
-    file: UploadFile,
+    existing_user = result.scalar_one_or_none()
+
+    if existing_user:
+        if existing_user.username == user.username:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Username already registered",
+            )
+
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already registered",
+        )
+
+    hashed_password = hash_password(user.password)
+
+    new_user = User(
+        username=user.username,
+        email=user.email,
+        hashed_password=hashed_password,
+    )
+
+    db.add(new_user)
+
+    await db.commit()
+    await db.refresh(new_user)
+
+    return {
+        "id": new_user.id,
+        "username": new_user.username,
+        "email": new_user.email,
+    }
+
+
+@router.delete(
+    "/delete/me",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_me(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    old_avatar_url = current_user.avatar_url
+    await delete_user_by_id(
+        db=db,
+        user_id=current_user.id,
+    )
 
-    new_file_path = None
 
-    try:
-        new_file_path, new_avatar_url = await save_avatar(
-            current_user.id,
-            file,
+@router.delete(
+    "/delete/{user_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_user(
+    user_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(User).where(User.id == user_id)
+    )
+
+    user = result.scalar_one_or_none()
+
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
         )
 
-        current_user.avatar_url = new_avatar_url
+    await db.delete(user)
+    await db.commit()
+
+
+@router.post("/me/avatar")
+async def upload_avatar(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    extension = await validate_image(
+        file,
+        settings.max_avatar_size,
+    )
+
+    key = (
+        f"{settings.s3_prefix}/"
+        f"users/avatars/"
+        f"{current_user.id}/"
+        f"{uuid.uuid4()}.{extension}"
+    )
+
+    old_avatar_url = current_user.avatar_url
+
+    try:
+        avatar_url = await storage.upload_file(
+            file=file,
+            key=key,
+            content_type=file.content_type,
+        )
+
+        current_user.avatar_url = avatar_url
 
         await db.commit()
         await db.refresh(current_user)
 
-    except HTTPException:
-        if new_file_path:
-            delete_file(new_file_path)
-
-        await db.rollback()
-        raise
-
     except Exception:
-        if new_file_path:
-            delete_file(new_file_path)
-
-        await db.rollback()
+        try:
+            await storage.delete(key)
+        except Exception:
+            pass
 
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Не удалось сохранить аватар",
+            detail="Failed to upload avatar",
         )
 
-    # Старый файл удаляем только после успешного commit.
+    # Удаляем старый файл после успешного сохранения нового
     if old_avatar_url:
-        old_file_path = public_url_to_path(
-            old_avatar_url
-        )
+        old_key = storage.key_from_url(old_avatar_url)
 
-        delete_file(old_file_path)
+        if old_key:
+            try:
+                await storage.delete(old_key)
+            except Exception:
+                pass
 
     return {
         "avatar_url": current_user.avatar_url,
     }
 
 
-# ============================================================
-# DELETE /users/me/avatar
-#
-# Удаление аватара
-# ============================================================
-
-@router.delete("/me/avatar")
+@router.delete(
+    "/me/avatar",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
 async def delete_avatar(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     if not current_user.avatar_url:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Аватар отсутствует",
-        )
+        return
 
     avatar_url = current_user.avatar_url
+    avatar_key = storage.key_from_url(avatar_url)
 
     current_user.avatar_url = None
 
     await db.commit()
 
-    avatar_path = public_url_to_path(
-        avatar_url
-    )
+    if avatar_key:
+        try:
+            await storage.delete(avatar_key)
+        except Exception:
+            pass
 
-    delete_file(avatar_path)
-
-    return {
-        "avatar_url": None,
-    }
-
-
-# ============================================================
-# POST /users/me/photos
-#
-# Добавление фотографии
-# ============================================================
 
 @router.post("/me/photos")
 async def upload_photo(
-    file: UploadFile,
+    file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
-        select(UserPhoto).where(
-            UserPhoto.user_id == current_user.id
-        )
+        select(UserPhoto)
+        .where(UserPhoto.user_id == current_user.id)
+        .order_by(UserPhoto.position)
     )
 
     photos = result.scalars().all()
 
-    if len(photos) >= settings.MAX_USER_PHOTOS:
+    if len(photos) >= settings.max_user_photos:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
-                f"Можно загрузить максимум "
-                f"{settings.MAX_USER_PHOTOS} фотографий"
+                f"Maximum number of photos is "
+                f"{settings.max_user_photos}"
             ),
         )
 
-    new_file_path = None
+    extension = await validate_image(
+        file,
+        settings.max_photo_size,
+    )
+
+    position = len(photos)
+
+    key = (
+        f"{settings.s3_prefix}/"
+        f"users/photos/"
+        f"{current_user.id}/"
+        f"{uuid.uuid4()}.{extension}"
+    )
 
     try:
-        new_file_path, image_url = await save_photo(
-            current_user.id,
-            file,
+        image_url = await storage.upload_file(
+            file=file,
+            key=key,
+            content_type=file.content_type,
         )
-
-        position = len(photos)
 
         photo = UserPhoto(
             user_id=current_user.id,
@@ -254,22 +350,15 @@ async def upload_photo(
         await db.commit()
         await db.refresh(photo)
 
-    except HTTPException:
-        if new_file_path:
-            delete_file(new_file_path)
-
-        await db.rollback()
-        raise
-
     except Exception:
-        if new_file_path:
-            delete_file(new_file_path)
-
-        await db.rollback()
+        try:
+            await storage.delete(key)
+        except Exception:
+            pass
 
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Не удалось сохранить фотографию",
+            detail="Failed to upload photo",
         )
 
     return {
@@ -279,13 +368,10 @@ async def upload_photo(
     }
 
 
-# ============================================================
-# DELETE /users/me/photos/{photo_id}
-#
-# Удаление фотографии
-# ============================================================
-
-@router.delete("/me/photos/{photo_id}")
+@router.delete(
+    "/me/photos/{photo_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
 async def delete_photo(
     photo_id: int,
     current_user: User = Depends(get_current_user),
@@ -298,127 +384,22 @@ async def delete_photo(
         )
     )
 
-    photo = result.scalars().first()
+    photo = result.scalar_one_or_none()
 
-    if not photo:
+    if photo is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Фотография не найдена",
+            detail="Photo not found",
         )
 
     image_url = photo.image_url
+    image_key = storage.key_from_url(image_url)
 
     await db.delete(photo)
-
     await db.commit()
 
-    image_path = public_url_to_path(
-        image_url
-    )
-
-    delete_file(image_path)
-
-    return {
-        "id": photo_id,
-        "deleted": True,
-    }
-
-
-# ============================================================
-# POST /users/register
-# ============================================================
-
-@router.post(
-    "/register",
-    status_code=status.HTTP_201_CREATED,
-)
-async def register_user(
-    user: UserCreate,
-    db: AsyncSession = Depends(get_db),
-):
-    result = await db.execute(
-        select(User).where(
-            (User.username == user.username)
-            | (User.email == user.email)
-        )
-    )
-
-    existing = result.scalars().first()
-
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="User already exists",
-        )
-
-    db_user = User(
-        username=user.username,
-        email=user.email,
-        hashed_password=hash_password(
-            user.password
-        ),
-    )
-
-    db.add(db_user)
-
-    await db.commit()
-    await db.refresh(db_user)
-
-    return {
-        "id": db_user.id,
-        "username": db_user.username,
-        "email": db_user.email,
-    }
-
-
-# ============================================================
-# DELETE /users/delete/me
-# ============================================================
-
-@router.delete(
-    "/delete/me",
-    status_code=status.HTTP_204_NO_CONTENT,
-)
-async def delete_me(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    await delete_user_by_id(
-        db,
-        current_user.id,
-    )
-
-    return
-
-
-# ============================================================
-# DELETE /users/delete/{user_id}
-# ============================================================
-
-@router.delete(
-    "/delete/{user_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-)
-async def delete_user(
-    user_id: int,
-    db: AsyncSession = Depends(get_db),
-):
-    result = await db.execute(
-        select(User).where(
-            User.id == user_id
-        )
-    )
-
-    user = result.scalars().first()
-
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found",
-        )
-
-    await db.delete(user)
-
-    await db.commit()
-
-    return
+    if image_key:
+        try:
+            await storage.delete(image_key)
+        except Exception:
+            pass
