@@ -2,24 +2,24 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    DATABASE_URL: str
-    SECRET_KEY: str
-    ALGORITHM: str
-    ACCESS_TOKEN_EXPIRE_MINUTES: int
+    database_url: str
+    secret_key: str
+    algorithm: str
+    access_token_expire_minutes: int
 
     # S3
-    S3_ENDPOINT: str
-    S3_PUBLIC_URL: str
-    S3_ACCESS_KEY: str
-    S3_SECRET_KEY: str
-    S3_BUCKET: str
-    S3_REGION: str = "us-east-1"
-    S3_PREFIX: str = "dev"
+    s3_endpoint: str
+    s3_public_url: str
+    s3_access_key: str
+    s3_secret_key: str
+    s3_bucket: str
+    s3_region: str = "us-east-1"
+    s3_prefix: str = "dev"
 
     # Upload limits
-    MAX_AVATAR_SIZE: int = 5 * 1024 * 1024
-    MAX_PHOTO_SIZE: int = 10 * 1024 * 1024
-    MAX_USER_PHOTOS: int = 5
+    max_avatar_size: int = 5 * 1024 * 1024
+    max_photo_size: int = 10 * 1024 * 1024
+    max_user_photos: int = 5
 
     model_config = SettingsConfigDict(
         extra="ignore"
