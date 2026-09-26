@@ -20,7 +20,7 @@ async def upload_test_file(
         data = await file.read()
 
         key = (
-            f"{settings.S3_PREFIX}/"
+            f"{settings.s3_prefix}/"
             f"test/"
             f"{uuid.uuid4()}-{file.filename}"
         )
