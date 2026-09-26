@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text
+from sqlalchemy import Column, Integer, String, Text, ForeignKey
 from sqlalchemy.orm import relationship
 
 from db.base import Base
@@ -72,4 +72,36 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan",
         order_by="UserPhoto.position"
+    )
+
+
+class UserPhoto(Base):
+    __tablename__ = "user_photos"
+
+    id = Column(
+        Integer,
+        primary_key=True
+    )
+
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True
+    )
+
+    image_url = Column(
+        String,
+        nullable=False
+    )
+
+    position = Column(
+        Integer,
+        nullable=False,
+        default=0
+    )
+
+    user = relationship(
+        "User",
+        back_populates="photos"
     )
