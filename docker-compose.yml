@@ -7,8 +7,7 @@ services:
       dockerfile: Dockerfile
     container_name: itamityt_web
     restart: always
-#    env_file:
-#      - ../.backendenv
+
 
     ports:
       - "8100:8100"

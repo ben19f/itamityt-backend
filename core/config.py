@@ -1,24 +1,25 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+
 class Settings(BaseSettings):
-    # База данных
-    database_url: str
+    DATABASE_URL: str
+    SECRET_KEY: str
+    ALGORITHM: str
+    ACCESS_TOKEN_EXPIRE_MINUTES: int
 
-    # JWT / auth
-    secret_key: str
-    algorithm: str
-    access_token_expire_minutes: int
+    S3_ENDPOINT: str
+    S3_PUBLIC_URL: str
+    S3_ACCESS_KEY: str
+    S3_SECRET_KEY: str
+    S3_BUCKET: str
+    S3_REGION: str = "us-east-1"
+    S3_PREFIX: str = "dev"
 
-    # Настройка чтения .env
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_prefix="",  # можно поставить "ITAMITYT_" если хочешь префиксы
-        env_names={
-            "database_url": "DATABASE_URL",
-            "secret_key": "SECRET_KEY",
-            "algorithm": "ALGORITHM",
-            "access_token_expire_minutes": "ACCESS_TOKEN_EXPIRE_MINUTES",
-        },
-    )
+    MAX_AVATAR_SIZE: int = 5 * 1024 * 1024
+    MAX_PHOTO_SIZE: int = 10 * 1024 * 1024
+    MAX_USER_PHOTOS: int = 5
+
+    model_config = SettingsConfigDict(extra="ignore")
+
 
 settings = Settings()
