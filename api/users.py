@@ -20,6 +20,12 @@ from db.deps import get_db
 from models.users_model import User, UserPhoto
 from services.storage import storage
 
+from datetime import datetime
+
+from models.email_verification import EmailVerificationToken
+from services.email_verification import hash_verification_token
+
+
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -36,6 +42,9 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str
 
+
+class EmailVerificationRequest(BaseModel):
+    token: str
 
 class UserProfileUpdate(BaseModel):
     display_name: str | None = None
@@ -86,6 +95,64 @@ async def validate_image(
         )
 
     return ALLOWED_IMAGE_TYPES[file.content_type]
+
+
+@router.post("/verify-email")
+async def verify_email(
+    data: EmailVerificationRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    token_hash = hash_verification_token(data.token)
+
+    result = await db.execute(
+        select(EmailVerificationToken).where(
+            EmailVerificationToken.token_hash == token_hash
+        )
+    )
+
+    verification_token = result.scalar_one_or_none()
+
+    if verification_token is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired verification token",
+        )
+
+    if verification_token.expires_at < datetime.utcnow():
+        await db.delete(verification_token)
+        await db.commit()
+
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Verification token has expired",
+        )
+
+    result = await db.execute(
+        select(User).where(
+            User.id == verification_token.user_id
+        )
+    )
+
+    user = result.scalar_one_or_none()
+
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    user.email_verified = True
+
+    # Токен одноразовый
+    await db.delete(verification_token)
+
+    await db.commit()
+
+    return {
+        "message": "Email successfully verified",
+        "email_verified": True,
+    }
+
 
 
 @router.get("/me")
@@ -425,3 +492,6 @@ async def delete_photo(
             await storage.delete(image_key)
         except Exception:
             pass
+
+
+

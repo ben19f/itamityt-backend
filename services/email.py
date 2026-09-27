@@ -41,7 +41,7 @@ class EmailService:
     ) -> None:
         verification_url = (
             f"{settings.public_api_url.rstrip('/')}"
-            f"/users/verify-email?token={token}"
+            f"/verify-email.php?token={token}"
         )
 
         body = f"""Здравствуйте!

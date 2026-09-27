@@ -41,7 +41,6 @@ async def create_user(
 
     return db_user
 
-
 async def delete_user_by_id(db: AsyncSession, user_id: int):
     user = await db.get(User, user_id)
     if not user:
