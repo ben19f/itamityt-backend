@@ -8,7 +8,7 @@ from sqlalchemy.engine import make_url
 
 # добавляем app/ в путь
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "app"))
-
+from models.email_verification import EmailVerificationToken
 from core.config import settings
 from db.base import Base
 from models.users_model import User

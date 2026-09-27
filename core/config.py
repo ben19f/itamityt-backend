@@ -16,6 +16,14 @@ class Settings(BaseSettings):
     s3_region: str = "us-east-1"
     s3_prefix: str = "dev"
 
+    smtp_host: str
+    smtp_port: int
+    smtp_username: str
+    smtp_password: str
+    smtp_from: str
+
+    public_api_url: str
+
     # Upload limits
     max_avatar_size: int = 5 * 1024 * 1024
     max_photo_size: int = 10 * 1024 * 1024
