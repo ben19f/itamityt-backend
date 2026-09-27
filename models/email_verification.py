@@ -39,6 +39,4 @@ class EmailVerificationToken(Base):
         default=datetime.utcnow
     )
 
-    user = relationship(
-        "User"
-    )
+    user = relationship("User")
