@@ -2,7 +2,7 @@ from sqlalchemy import Column, Integer, String, Text, ForeignKey
 from sqlalchemy.orm import relationship
 
 from db.base import Base
-
+from sqlalchemy import Boolean, Column, Integer, String, Text, ForeignKey
 
 class User(Base):
     __tablename__ = "users"
@@ -24,6 +24,12 @@ class User(Base):
         unique=True,
         index=True,
         nullable=True
+    )
+    
+    email_verified = Column(
+        Boolean,
+        nullable=False,
+        default=False
     )
 
     hashed_password = Column(
@@ -73,6 +79,8 @@ class User(Base):
         cascade="all, delete-orphan",
         order_by="UserPhoto.position"
     )
+
+
 
 
 class UserPhoto(Base):
