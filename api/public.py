@@ -1,46 +1,90 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from db.deps import get_db
-from db.crud_user import get_user_by_username, get_last_users
-from db.crud_item import get_items_by_user
+from models.users_model import User
 
-router = APIRouter(prefix="/public", tags=["public"])
+
+router = APIRouter(
+    prefix="/public",
+    tags=["public"]
+)
 
 
 @router.get("/profile/{username}")
-async def public_profile(username: str, db: AsyncSession = Depends(get_db)):
+async def get_public_profile(
+    username: str,
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(
+        select(User)
+        .options(
+            selectinload(User.photos),
+            selectinload(User.items)
+        )
+        .where(User.username == username)
+    )
 
-    user = await get_user_by_username(db, username)
+    user = result.scalars().first()
 
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
 
-    items = await get_items_by_user(db, user.id)
+    return {
+        "username": user.username,
+        "display_name": user.display_name,
+        "avatar_url": user.avatar_url,
+        "owner_verified": user.owner_verified,
+        "service_verified": user.service_verified,
 
-    return items
+        "photos": [
+            photo.image_url
+            for photo in user.photos
+        ],
+
+        "description": user.profile_description,
+
+        "items": [
+            {
+                "name": item.name,
+                "link_id": item.link_id
+            }
+            for item in user.items
+        ],
+
+        "extra": user.profile_extra_info,
+
+        "blocks": [
+            "gallery",
+            "description",
+            "links",
+            "extra"
+        ]
+    }
 
 
 @router.get("/last-users")
-async def last_users(db: AsyncSession = Depends(get_db)):
+async def get_last_users(
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(
+        select(User)
+        .order_by(User.id.desc())
+        .limit(10)
+    )
 
-    users = await get_last_users(db, limit=3)
+    users = result.scalars().all()
 
-    result = []
-
-    for user in users:
-
-        items = await get_items_by_user(db, user.id)
-
-        result.append({
+    return [
+        {
             "username": user.username,
-            "items": [
-                {
-                    "name": i.name,
-                    "link_id": i.link_id
-                }
-                for i in items
-            ]
-        })
-
-    return result
+            "display_name": user.display_name,
+            "avatar_url": user.avatar_url
+        }
+        for user in users
+    ]
