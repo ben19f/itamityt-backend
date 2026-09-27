@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 
 from fastapi import (
     APIRouter,
@@ -8,26 +9,26 @@ from fastapi import (
     UploadFile,
     status,
 )
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import settings
-from core.security import get_current_user, hash_password
+from core.security import get_current_user
 from db.crud_user import delete_user_by_id
 from db.deps import get_db
-# from models.user_photo import UserPhoto
+
 from models.users_model import User, UserPhoto
+from models.email_verification import EmailVerificationToken
+
+from services.email_verification import hash_verification_token
 from services.storage import storage
 
-from datetime import datetime
 
-from models.email_verification import EmailVerificationToken
-from services.email_verification import hash_verification_token
-
-
-
-router = APIRouter(prefix="/users", tags=["users"])
+router = APIRouter(
+    prefix="/users",
+    tags=["users"],
+)
 
 
 ALLOWED_IMAGE_TYPES = {
@@ -37,20 +38,44 @@ ALLOWED_IMAGE_TYPES = {
 }
 
 
-class UserCreate(BaseModel):
-    username: str
-    email: EmailStr
-    password: str
-
+# ============================================================
+# SCHEMAS
+# ============================================================
 
 class EmailVerificationRequest(BaseModel):
     token: str
+
 
 class UserProfileUpdate(BaseModel):
     display_name: str | None = None
     profile_description: str | None = None
     profile_extra_info: str | None = None
 
+
+# ============================================================
+# DEPENDENCIES
+# ============================================================
+
+async def require_verified_user(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    """
+    Доступ только для пользователей,
+    подтвердивших email.
+    """
+
+    if not current_user.email_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Подтвердите email, чтобы использовать эту функцию",
+        )
+
+    return current_user
+
+
+# ============================================================
+# IMAGE VALIDATION
+# ============================================================
 
 async def validate_image(
     file: UploadFile,
@@ -97,11 +122,22 @@ async def validate_image(
     return ALLOWED_IMAGE_TYPES[file.content_type]
 
 
+# ============================================================
+# EMAIL VERIFICATION
+# ============================================================
+
 @router.post("/verify-email")
 async def verify_email(
     data: EmailVerificationRequest,
     db: AsyncSession = Depends(get_db),
 ):
+    """
+    Подтверждение email по одноразовому токену.
+
+    Этот endpoint доступен неподтверждённому пользователю,
+    потому что именно он переводит email_verified в True.
+    """
+
     token_hash = hash_verification_token(data.token)
 
     result = await db.execute(
@@ -154,15 +190,25 @@ async def verify_email(
     }
 
 
+# ============================================================
+# CURRENT USER PROFILE
+# ============================================================
 
 @router.get("/me")
 async def get_me(
     current_user: User = Depends(get_current_user),
 ):
+    """
+    Просмотр собственного профиля.
+
+    Доступен даже до подтверждения email.
+    """
+
     return {
         "id": current_user.id,
         "username": current_user.username,
         "email": current_user.email,
+        "email_verified": current_user.email_verified,
         "display_name": current_user.display_name,
         "profile_description": current_user.profile_description,
         "profile_extra_info": current_user.profile_extra_info,
@@ -173,9 +219,15 @@ async def get_me(
 @router.patch("/me")
 async def update_me(
     profile: UserProfileUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_user),
     db: AsyncSession = Depends(get_db),
 ):
+    """
+    Изменение профиля.
+
+    Изменять профиль можно только после подтверждения email.
+    """
+
     data = profile.model_dump(exclude_unset=True)
 
     for field, value in data.items():
@@ -188,6 +240,7 @@ async def update_me(
         "id": current_user.id,
         "username": current_user.username,
         "email": current_user.email,
+        "email_verified": current_user.email_verified,
         "display_name": current_user.display_name,
         "profile_description": current_user.profile_description,
         "profile_extra_info": current_user.profile_extra_info,
@@ -195,11 +248,22 @@ async def update_me(
     }
 
 
+# ============================================================
+# CURRENT USER PHOTOS
+# ============================================================
+
 @router.get("/me/photos")
 async def get_my_photos(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    """
+    Просмотр собственных фотографий.
+
+    Разрешён до подтверждения email,
+    так как это просмотр собственного профиля.
+    """
+
     result = await db.execute(
         select(UserPhoto)
         .where(UserPhoto.user_id == current_user.id)
@@ -217,51 +281,10 @@ async def get_my_photos(
         for photo in photos
     ]
 
-@router.post("/register", status_code=status.HTTP_201_CREATED)
-async def register_user(
-    user: UserCreate,
-    db: AsyncSession = Depends(get_db),
-):
-    result = await db.execute(
-        select(User).where(
-            (User.username == user.username)
-            | (User.email == user.email)
-        )
-    )
 
-    existing_user = result.scalar_one_or_none()
-
-    if existing_user:
-        if existing_user.username == user.username:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Username already registered",
-            )
-
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already registered",
-        )
-
-    hashed_password = hash_password(user.password)
-
-    new_user = User(
-        username=user.username,
-        email=user.email,
-        hashed_password=hashed_password,
-    )
-
-    db.add(new_user)
-
-    await db.commit()
-    await db.refresh(new_user)
-
-    return {
-        "id": new_user.id,
-        "username": new_user.username,
-        "email": new_user.email,
-    }
-
+# ============================================================
+# DELETE CURRENT USER
+# ============================================================
 
 @router.delete(
     "/delete/me",
@@ -271,42 +294,34 @@ async def delete_me(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    """
+    Удаление собственного аккаунта.
+
+    Разрешено без подтверждения email.
+    """
+
     await delete_user_by_id(
         db=db,
         user_id=current_user.id,
     )
 
 
-@router.delete(
-    "/delete/{user_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-)
-async def delete_user(
-    user_id: int,
-    db: AsyncSession = Depends(get_db),
-):
-    result = await db.execute(
-        select(User).where(User.id == user_id)
-    )
-
-    user = result.scalar_one_or_none()
-
-    if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found",
-        )
-
-    await db.delete(user)
-    await db.commit()
-
+# ============================================================
+# AVATAR
+# ============================================================
 
 @router.post("/me/avatar")
 async def upload_avatar(
     file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_user),
     db: AsyncSession = Depends(get_db),
 ):
+    """
+    Загрузка avatar.
+
+    Требует подтверждения email.
+    """
+
     extension = await validate_image(
         file,
         settings.max_avatar_size,
@@ -364,9 +379,15 @@ async def upload_avatar(
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def delete_avatar(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_user),
     db: AsyncSession = Depends(get_db),
 ):
+    """
+    Удаление avatar.
+
+    Требует подтверждения email.
+    """
+
     if not current_user.avatar_url:
         return
 
@@ -384,12 +405,22 @@ async def delete_avatar(
             pass
 
 
+# ============================================================
+# PHOTOS
+# ============================================================
+
 @router.post("/me/photos")
 async def upload_photo(
     file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_user),
     db: AsyncSession = Depends(get_db),
 ):
+    """
+    Добавление фотографии.
+
+    Требует подтверждения email.
+    """
+
     result = await db.execute(
         select(UserPhoto)
         .where(UserPhoto.user_id == current_user.id)
@@ -463,9 +494,15 @@ async def upload_photo(
 )
 async def delete_photo(
     photo_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_user),
     db: AsyncSession = Depends(get_db),
 ):
+    """
+    Удаление фотографии.
+
+    Требует подтверждения email.
+    """
+
     result = await db.execute(
         select(UserPhoto).where(
             UserPhoto.id == photo_id,
@@ -492,6 +529,3 @@ async def delete_photo(
             await storage.delete(image_key)
         except Exception:
             pass
-
-
-
