@@ -22,20 +22,24 @@ async def get_last_users(db: AsyncSession, limit: int = 3):
     return result.scalars().all()
 
 
-async def create_user(db: AsyncSession, user: UserCreate, hashed_password: str):
-
+async def create_user(
+    db: AsyncSession,
+    user: UserCreate,
+    hashed_password: str
+):
     db_user = User(
         email=user.email,
         username=user.username,
-        hashed_password=hashed_password
+        hashed_password=hashed_password,
+        email_verified=False,
     )
 
     db.add(db_user)
+
     await db.commit()
     await db.refresh(db_user)
 
     return db_user
-
 
 async def delete_user_by_id(db: AsyncSession, user_id: int):
     user = await db.get(User, user_id)
