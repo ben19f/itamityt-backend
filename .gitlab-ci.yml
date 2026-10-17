@@ -5,7 +5,7 @@ stages:
 
 test-user-journey:
   stage: test
-  image: python:3.11-slim
+  image: 192.168.96.116:5000/base/python:3.11-slim
   services:
     - name: postgres:16-alpine
       alias: postgres

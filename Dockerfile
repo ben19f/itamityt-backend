@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM 192.168.96.116:5000/base/python:3.11-slim
 
 # Создаём рабочую директорию
 WORKDIR /app
