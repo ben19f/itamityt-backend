@@ -11,12 +11,11 @@ COPY requirements.txt .
 #RUN pip install --upgrade pip \
 #    && pip install --no-cache-dir -r requirements.txt
 ## если использовать из кеша
-RUN pip install --upgrade pip \
-    && pip install -r requirements.txt
 
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -r requirements.txt
 
-
-# Копируем весь код
+# Копируем весь кодраз комментировал s3 переменные
 COPY . /app
 
 # Экспонируем порт FastAPI

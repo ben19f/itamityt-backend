@@ -42,7 +42,7 @@ async def test_complete_user_lifecycle(monkeypatch):
         email_service, "send_verification_email", capture_verification_email
     )
 
-    async def fake_upload_file(_file, key: str, content_type=None) -> str:
+    async def fake_upload_file(file, key: str, content_type=None) -> str:
         stored_objects.add(key)
         return storage.public_url(key)
 
