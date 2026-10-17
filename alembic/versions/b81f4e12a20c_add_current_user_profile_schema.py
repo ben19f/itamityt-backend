@@ -1,7 +1,7 @@
 """Add profile and verification schema required by the current API.
 
 Revision ID: b81f4e12a20c
-Revises: 060e403ae397
+Revises: 03421efc787e
 Create Date: 2026-10-18
 """
 from typing import Sequence, Union
@@ -10,7 +10,7 @@ from alembic import op
 
 
 revision: str = "b81f4e12a20c"
-down_revision: Union[str, Sequence[str], None] = "060e403ae397"
+down_revision: Union[str, Sequence[str], None] = "03421efc787e"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
