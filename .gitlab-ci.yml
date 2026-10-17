@@ -10,6 +10,7 @@ test-user-journey:
     - name: 192.168.96.116:5000/base/postgres:16-alpine
       alias: postgres
   variables:
+    PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
     POSTGRES_DB: itamityt_test
     POSTGRES_USER: itamityt
     POSTGRES_PASSWORD: ci_test_password
@@ -32,8 +33,14 @@ test-user-journey:
     SMTP_PASSWORD: ci-test
     SMTP_FROM: ci-test@example.com
     PUBLIC_API_URL: http://localhost:8100
+  cache:
+    key:
+      files:
+        - requirements.txt
+    paths:
+      - .cache/pip/
   script:
-    - pip install --no-cache-dir -r requirements.txt
+    - pip install -r requirements.txt
     - alembic upgrade head
     - pytest -q tests/test_user_journey.py
   tags:
