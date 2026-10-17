@@ -76,8 +76,19 @@ def upgrade() -> None:
         "ON email_verification_tokens (token_hash)"
     )
 
+    # Item deletion removes click records in db.crud_item.delete_item.
+    op.execute(
+        """
+        CREATE TABLE IF NOT EXISTS clicks (
+            id SERIAL PRIMARY KEY,
+            link_id VARCHAR(50) REFERENCES items(link_id) ON DELETE CASCADE
+        )
+        """
+    )
+
 
 def downgrade() -> None:
+    op.drop_table("clicks")
     op.drop_table("email_verification_tokens")
     op.drop_table("user_photos")
     op.drop_column("users", "service_verified")
