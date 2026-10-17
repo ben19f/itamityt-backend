@@ -1,10 +1,28 @@
 stages:
+  - test
   - build-latest
   - build-tag
+
+test-user-journey:
+  stage: test
+  image: python:3.11-slim
+  services:
+    - name: postgres:16-alpine
+      alias: postgres
+  variables:
+    PUBLIC_API_URL: http://localhost:8100
+  script:
+    - pip install --no-cache-dir -r requirements.txt
+    - alembic upgrade head
+    - pytest -q tests/test_user_journey.py
+  tags:
+    - docker
 
 build-test-image:
   stage: build-latest
   image: docker:24-cli
+  needs:
+    - test-user-journey
 
   tags:
     - docker
@@ -21,6 +39,8 @@ build-test-image:
 build-tag-image:
   stage: build-tag
   image: docker:24-cli
+  needs:
+    - test-user-journey
 
   tags:
     - docker
