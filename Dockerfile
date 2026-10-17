@@ -7,8 +7,14 @@ WORKDIR /app
 COPY requirements.txt .
 
 # Устанавливаем зависимости
+##если надо качать
+#RUN pip install --upgrade pip \
+#    && pip install --no-cache-dir -r requirements.txt
+## если использовать из кеша
 RUN pip install --upgrade pip \
-    && pip install --no-cache-dir -r requirements.txt
+    && pip install -r requirements.txt
+
+
 
 # Копируем весь код
 COPY . /app
