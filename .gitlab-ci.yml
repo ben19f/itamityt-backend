@@ -17,14 +17,14 @@ test-user-journey:
     SECRET_KEY: ci-only-secret-key
     ALGORITHM: HS256
     ACCESS_TOKEN_EXPIRE_MINUTES: "60"
-#    # The test stubs storage operations, but settings still validates these fields.
-#    S3_ENDPOINT: http://localhost:9000
-#    S3_PUBLIC_URL: http://localhost:9000/itamityt-test
-#    S3_ACCESS_KEY: ci-test-access-key
-#    S3_SECRET_KEY: ci-test-secret-key
-#    S3_BUCKET: itamityt-test
-#    S3_REGION: us-east-1
-#    S3_PREFIX: ci-test
+    # Storage is stubbed in the test; Settings still requires these values.
+    S3_ENDPOINT: http://localhost:9000
+    S3_PUBLIC_URL: http://localhost:9000/itamityt-test
+    S3_ACCESS_KEY: ci-test-access-key
+    S3_SECRET_KEY: ci-test-secret-key
+    S3_BUCKET: itamityt-test
+    S3_REGION: us-east-1
+    S3_PREFIX: ci-test
     # Settings validates SMTP config during app import; the test stubs email delivery.
     SMTP_HOST: localhost
     SMTP_PORT: "465"
