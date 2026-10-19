@@ -14,7 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import settings
-from core.security import get_current_user
+from core.security import get_current_user, hash_password, verify_password
 from db.crud_user import delete_user_by_id
 from db.deps import get_db
 
@@ -50,6 +50,11 @@ class UserProfileUpdate(BaseModel):
     display_name: str | None = None
     profile_description: str | None = None
     profile_extra_info: str | None = None
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
 
 
 # ============================================================
@@ -246,6 +251,38 @@ async def update_me(
         "profile_extra_info": current_user.profile_extra_info,
         "avatar_url": current_user.avatar_url,
     }
+
+
+@router.patch("/me/password")
+async def change_my_password(
+    data: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Change the authenticated user's password after confirming the current one."""
+
+    if not current_user.hashed_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Для аккаунта не задан текущий пароль",
+        )
+
+    if not verify_password(data.current_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Текущий пароль указан неверно",
+        )
+
+    if data.current_password == data.new_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Новый пароль должен отличаться от текущего",
+        )
+
+    current_user.hashed_password = hash_password(data.new_password)
+    await db.commit()
+
+    return {"message": "Пароль успешно изменён"}
 
 
 # ============================================================
