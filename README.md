@@ -1,7 +1,6 @@
 настроил одну миграцию для прот и дев базах
 добавил регистрацию с подтверждением через почту
 
-
 # ITAMITYT Backend
 
 Backend сервиса [itamityt.ru](https://itamityt.ru), построенный на FastAPI.
