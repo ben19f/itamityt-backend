@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM 192.168.96.116:5000/base/python:3.11-slim
 
 # Создаём рабочую директорию
 WORKDIR /app
@@ -7,10 +7,15 @@ WORKDIR /app
 COPY requirements.txt .
 
 # Устанавливаем зависимости
-RUN pip install --upgrade pip \
-    && pip install --no-cache-dir -r requirements.txt
+##если надо качать
+#RUN pip install --upgrade pip \
+#    && pip install --no-cache-dir -r requirements.txt
+## если использовать из кеша
 
-# Копируем весь код
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -r requirements.txt
+
+# Копируем весь кодраз комментировал s3 переменные
 COPY . /app
 
 # Экспонируем порт FastAPI
