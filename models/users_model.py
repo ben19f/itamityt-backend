@@ -3,6 +3,8 @@ from sqlalchemy.orm import relationship
 
 from db.base import Base
 from sqlalchemy import Boolean, Column, Integer, String, Text, ForeignKey
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.ext.mutable import MutableDict
 
 class User(Base):
     __tablename__ = "users"
@@ -65,6 +67,13 @@ class User(Base):
     service_verified = Column(
         String(1),
         nullable=True
+    )
+
+    tags = Column(
+        MutableDict.as_mutable(JSONB),
+        nullable=False,
+        default=dict,
+        server_default="{}"
     )
 
     items = relationship(
