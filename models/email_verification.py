@@ -28,6 +28,11 @@ class EmailVerificationToken(Base):
         index=True
     )
 
+    pending_email = Column(
+        String,
+        nullable=True
+    )
+
     expires_at = Column(
         DateTime,
         nullable=False

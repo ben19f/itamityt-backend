@@ -64,5 +64,34 @@ class EmailService:
             body,
         )
 
+    async def send_email_change_verification(
+        self,
+        to_email: str,
+        token: str,
+    ) -> None:
+        verification_url = (
+            f"{settings.public_api_url.rstrip('/')}"
+            f"/verify-email.php?token={token}"
+        )
+
+        body = f"""Здравствуйте!
+
+Чтобы изменить адрес e-mail в профиле itamityt.ru, перейдите по ссылке:
+
+{verification_url}
+
+Ссылка действительна в течение 24 часов. Текущий адрес останется без изменений,
+если вы не подтвердите новый.
+
+Если вы не запрашивали изменение адреса, просто проигнорируйте это письмо.
+"""
+
+        await run_in_threadpool(
+            self._send,
+            to_email,
+            "Подтверждение нового e-mail — itamityt.ru",
+            body,
+        )
+
 
 email_service = EmailService()
