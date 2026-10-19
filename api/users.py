@@ -169,6 +169,12 @@ async def verify_email(
             detail="Invalid or expired verification token",
         )
 
+    if verification_token.purpose not in {"email_verification", "email_change"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid verification token",
+        )
+
     if verification_token.expires_at < datetime.utcnow():
         await db.delete(verification_token)
         await db.commit()
@@ -277,6 +283,7 @@ async def request_email_change(
             user_id=current_user.id,
             token_hash=hash_verification_token(raw_token),
             pending_email=new_email,
+            purpose="email_change",
             expires_at=datetime.utcnow() + timedelta(hours=24),
         )
     )

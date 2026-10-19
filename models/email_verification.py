@@ -33,6 +33,13 @@ class EmailVerificationToken(Base):
         nullable=True
     )
 
+    purpose = Column(
+        String,
+        nullable=False,
+        default="email_verification",
+        server_default="email_verification",
+    )
+
     expires_at = Column(
         DateTime,
         nullable=False

@@ -93,5 +93,32 @@ class EmailService:
             body,
         )
 
+    async def send_password_reset_email(
+        self,
+        to_email: str,
+        token: str,
+    ) -> None:
+        reset_url = (
+            f"{settings.public_api_url.rstrip('/')}"
+            f"/reset-password.php?token={token}"
+        )
+
+        body = f"""Здравствуйте!
+
+Для сброса пароля на itamityt.ru перейдите по ссылке:
+
+{reset_url}
+
+Ссылка действительна в течение 1 часа и может быть использована только один раз.
+Если вы не запрашивали сброс пароля, просто проигнорируйте это письмо.
+"""
+
+        await run_in_threadpool(
+            self._send,
+            to_email,
+            "Сброс пароля — itamityt.ru",
+            body,
+        )
+
 
 email_service = EmailService()
