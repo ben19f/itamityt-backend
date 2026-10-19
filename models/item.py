@@ -14,5 +14,6 @@ class Item(Base):
 
     owner_user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     user = relationship("User", back_populates="items")
+    clicks = relationship("Click", back_populates="item")
 
     created_at = Column(String, server_default=func.now())
