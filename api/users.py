@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fastapi import (
     APIRouter,
@@ -9,19 +9,24 @@ from fastapi import (
     UploadFile,
     status,
 )
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import settings
-from core.security import get_current_user
+from core.security import get_current_user, hash_password, verify_password
 from db.crud_user import delete_user_by_id
 from db.deps import get_db
 
 from models.users_model import User, UserPhoto
 from models.email_verification import EmailVerificationToken
 
-from services.email_verification import hash_verification_token
+from services.email_verification import (
+    generate_verification_token,
+    hash_verification_token,
+)
+from services.email import email_service
 from services.storage import storage
 
 
@@ -50,6 +55,16 @@ class UserProfileUpdate(BaseModel):
     display_name: str | None = None
     profile_description: str | None = None
     profile_extra_info: str | None = None
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
+class ChangeEmailRequest(BaseModel):
+    new_email: EmailStr
+    current_password: str
 
 
 # ============================================================
@@ -154,6 +169,12 @@ async def verify_email(
             detail="Invalid or expired verification token",
         )
 
+    if verification_token.purpose not in {"email_verification", "email_change"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid verification token",
+        )
+
     if verification_token.expires_at < datetime.utcnow():
         await db.delete(verification_token)
         await db.commit()
@@ -177,16 +198,103 @@ async def verify_email(
             detail="User not found",
         )
 
-    user.email_verified = True
+    if verification_token.pending_email:
+        result = await db.execute(
+            select(User).where(
+                User.email == verification_token.pending_email,
+                User.id != user.id,
+            )
+        )
+        if result.scalar_one_or_none() is not None:
+            await db.delete(verification_token)
+            await db.commit()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Этот e-mail уже используется",
+            )
+
+        user.email = verification_token.pending_email
+        user.email_verified = True
+    else:
+        user.email_verified = True
 
     # Токен одноразовый
     await db.delete(verification_token)
 
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Этот e-mail уже используется",
+        )
 
     return {
         "message": "Email successfully verified",
         "email_verified": True,
+    }
+
+
+@router.patch("/me/email")
+async def request_email_change(
+    data: ChangeEmailRequest,
+    current_user: User = Depends(require_verified_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Send a confirmation link before replacing the user's current email."""
+
+    if not current_user.hashed_password or not verify_password(
+        data.current_password,
+        current_user.hashed_password,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Текущий пароль указан неверно",
+        )
+
+    new_email = str(data.new_email)
+    if new_email == current_user.email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Новый e-mail совпадает с текущим",
+        )
+
+    result = await db.execute(select(User).where(User.email == new_email))
+    if result.scalar_one_or_none() is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Этот e-mail уже используется",
+        )
+
+    # Keep only the latest outstanding email-change request for this user.
+    result = await db.execute(
+        select(EmailVerificationToken).where(
+            EmailVerificationToken.user_id == current_user.id,
+            EmailVerificationToken.pending_email.is_not(None),
+        )
+    )
+    for old_token in result.scalars():
+        await db.delete(old_token)
+
+    raw_token = generate_verification_token()
+    db.add(
+        EmailVerificationToken(
+            user_id=current_user.id,
+            token_hash=hash_verification_token(raw_token),
+            pending_email=new_email,
+            purpose="email_change",
+            expires_at=datetime.utcnow() + timedelta(hours=24),
+        )
+    )
+    await db.commit()
+
+    await email_service.send_email_change_verification(new_email, raw_token)
+
+    return {
+        "message": "На новый адрес отправлена ссылка для подтверждения",
+        "email": current_user.email,
+        "pending_email": new_email,
     }
 
 
@@ -246,6 +354,38 @@ async def update_me(
         "profile_extra_info": current_user.profile_extra_info,
         "avatar_url": current_user.avatar_url,
     }
+
+
+@router.patch("/me/password")
+async def change_my_password(
+    data: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Change the authenticated user's password after confirming the current one."""
+
+    if not current_user.hashed_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Для аккаунта не задан текущий пароль",
+        )
+
+    if not verify_password(data.current_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Текущий пароль указан неверно",
+        )
+
+    if data.current_password == data.new_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Новый пароль должен отличаться от текущего",
+        )
+
+    current_user.hashed_password = hash_password(data.new_password)
+    await db.commit()
+
+    return {"message": "Пароль успешно изменён"}
 
 
 # ============================================================
